@@ -84,7 +84,6 @@ def main():
                     )
                     
                     # Verifica se existe descrição e se não está vazia
-                    descricao = "Falha de energia na região de Itaquera. Equipes atuando." # TESTE FORÇADO
                     if descricao and len(str(descricao).strip()) > 0:
                         msg += f"\n\n📢 **Detalhes:**\n_{descricao}_"
                     # -------------------------------------------
