@@ -1,0 +1,48 @@
+name: Monitorar Metrô SP
+
+on:
+  schedule:
+    # Roda a cada 15 minutos (limite razoável do GitHub Free)
+    # A sintaxe cron é: minuto hora dia mes dia-da-semana
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # Permite rodar manualmente clicando num botão para testar
+
+jobs:
+  vigia:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      # Dá permissão para o robô escrever no repositório (salvar o json)
+      contents: write
+      
+    steps:
+      - name: Baixar código do repositório
+        uses: actions/checkout@v3
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Instalar dependências
+        run: |
+          pip install requests
+
+      - name: Rodar Script de Monitoramento
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python monitor_metro_actions.py
+
+      - name: Commit e Push se houver mudanças no JSON
+        run: |
+          git config --global user.name 'Agente Metro Bot'
+          git config --global user.email 'bot@noreply.github.com'
+          # Verifica se o arquivo json mudou
+          if [[ -n $(git status --porcelain estado_metro.json) ]]; then
+            git add estado_metro.json
+            git commit -m "Atualizando status do metrô [skip ci]"
+            git push
+          else
+            echo "Nenhuma mudança de status para salvar."
+          fi
