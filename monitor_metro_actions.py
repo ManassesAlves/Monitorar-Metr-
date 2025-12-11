@@ -35,22 +35,18 @@ def salvar_estado_atual(estado):
         json.dump(estado, f, indent=4)
 
 def salvar_historico(nome_linha, status_novo, status_antigo, descricao):
-    """Escreve o incidente no arquivo CSV (Excel)"""
     arquivo_existe = os.path.exists(ARQUIVO_HISTORICO)
-    
     agora = get_horario_sp()
     
     with open(ARQUIVO_HISTORICO, mode='a', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        
-        # Se é a primeira vez, cria o cabeçalho das colunas
         if not arquivo_existe:
             writer.writerow(["Data", "Hora", "Dia_Semana", "Linha", "Status_Novo", "Status_Anterior", "Descricao"])
             
         writer.writerow([
             agora.strftime("%Y-%m-%d"),
             agora.strftime("%H:%M:%S"),
-            agora.strftime("%A"), # Dia da semana
+            agora.strftime("%A"),
             nome_linha,
             status_novo,
             status_antigo,
@@ -73,25 +69,27 @@ def main():
             for linha in linhas:
                 nome = f"Linha {linha.get('codigo')} - {linha.get('nome')}"
                 status_atual = linha.get('situacao')
-                descricao = linha.get('descricao')
+                descricao = linha.get('descricao') # Captura a descrição do problema
                 
                 # Se mudou de status
                 if nome in estado_anterior and estado_anterior[nome] != status_atual:
                     status_antigo = estado_anterior[nome]
                     
-                    # 1. Avisa no Telegram
+                    # --- MONTAGEM DA MENSAGEM COM DESCRIÇÃO ---
                     emoji = "✅" if "Normal" in status_atual else "⚠️"
                     msg = (
                         f"{emoji} **{nome}**\n"
-                        f"De: {status_antigo}\n"
-                        f"Para: **{status_atual}**"
+                        f"🔄 De: {status_antigo}\n"
+                        f"➡️ Para: **{status_atual}**"
                     )
-                    if descricao and "Normal" not in status_atual:
-                        msg += f"\nObs: _{descricao}_"
+                    
+                    # Verifica se existe descrição e se não está vazia
+                    descricao = "Falha de energia na região de Itaquera. Equipes atuando." # TESTE FORÇADO
+                    if descricao and len(str(descricao).strip()) > 0:
+                        msg += f"\n\n📢 **Detalhes:**\n_{descricao}_"
+                    # -------------------------------------------
                     
                     enviar_telegram(msg)
-                    
-                    # 2. Salva no Histórico (CSV)
                     salvar_historico(nome, status_atual, status_antigo, descricao)
                     
                     print(f"Registrado: {nome} mudou para {status_atual}")
@@ -100,7 +98,6 @@ def main():
                 # Atualiza memória
                 novo_estado[nome] = status_atual
             
-            # Se houve mudança, salva o JSON e o CSV
             if houve_mudanca or not estado_anterior:
                 salvar_estado_atual(novo_estado)
             else:
