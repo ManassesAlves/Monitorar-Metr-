@@ -34,15 +34,16 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python monitor_metro_actions.py
 
-      - name: Commit e Push se houver mudanças no JSON
+      - name: Commit e Push se houver mudanças
         run: |
           git config --global user.name 'Agente Metro Bot'
           git config --global user.email 'bot@noreply.github.com'
-          # Verifica se o arquivo json mudou
-          if [[ -n $(git status --porcelain estado_metro.json) ]]; then
-            git add estado_metro.json
-            git commit -m "Atualizando status do metrô [skip ci]"
+          
+          # Verifica se JSON ou CSV mudaram
+          if [[ -n $(git status --porcelain) ]]; then
+            git add estado_metro.json historico_metro.csv
+            git commit -m "Atualizando status e histórico [skip ci]"
             git push
           else
-            echo "Nenhuma mudança de status para salvar."
+            echo "Nenhuma mudança para salvar."
           fi
