@@ -1,39 +1,64 @@
 import requests
 import json
+import csv
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 
-# --- CONFIGURAÇÕES VIA VARIÁVEIS DE AMBIENTE ---
-# O GitHub vai injetar esses valores na hora de rodar
+# --- CONFIGURAÇÕES ---
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 URL_API = "https://www.diretodostrens.com.br/api/status"
 ARQUIVO_ESTADO = "estado_metro.json"
+ARQUIVO_HISTORICO = "historico_metro.csv"
+
+def get_horario_sp():
+    """Retorna data/hora ajustada para São Paulo (UTC-3)"""
+    fuso_sp = timezone(timedelta(hours=-3))
+    return datetime.now(fuso_sp)
 
 def enviar_telegram(mensagem):
     if not TOKEN or not CHAT_ID:
-        print("ERRO: Tokens não configurados.")
         return
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     data = {"chat_id": CHAT_ID, "text": mensagem, "parse_mode": "Markdown"}
     requests.post(url, data=data)
 
 def carregar_estado_anterior():
-    """Lê o arquivo JSON salvo no repositório."""
     if os.path.exists(ARQUIVO_ESTADO):
         with open(ARQUIVO_ESTADO, 'r') as f:
             return json.load(f)
     return {}
 
 def salvar_estado_atual(estado):
-    """Salva o estado atual no arquivo JSON."""
     with open(ARQUIVO_ESTADO, 'w') as f:
         json.dump(estado, f, indent=4)
 
+def salvar_historico(nome_linha, status_novo, status_antigo, descricao):
+    """Escreve o incidente no arquivo CSV (Excel)"""
+    arquivo_existe = os.path.exists(ARQUIVO_HISTORICO)
+    
+    agora = get_horario_sp()
+    
+    with open(ARQUIVO_HISTORICO, mode='a', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        
+        # Se é a primeira vez, cria o cabeçalho das colunas
+        if not arquivo_existe:
+            writer.writerow(["Data", "Hora", "Dia_Semana", "Linha", "Status_Novo", "Status_Anterior", "Descricao"])
+            
+        writer.writerow([
+            agora.strftime("%Y-%m-%d"),
+            agora.strftime("%H:%M:%S"),
+            agora.strftime("%A"), # Dia da semana
+            nome_linha,
+            status_novo,
+            status_antigo,
+            descricao
+        ])
+
 def main():
     print("--- Iniciando Verificação ---")
-    
-    # 1. Carrega o passado
     estado_anterior = carregar_estado_anterior()
     novo_estado = estado_anterior.copy()
     houve_mudanca = False
@@ -50,36 +75,40 @@ def main():
                 status_atual = linha.get('situacao')
                 descricao = linha.get('descricao')
                 
-                # Se a linha é nova ou mudou de status
-                if nome not in estado_anterior or estado_anterior[nome] != status_atual:
-                    # Se não é a primeira vez que rodamos (tem histórico), avisa
-                    if estado_anterior: 
-                        emoji = "✅" if "Normal" in status_atual else "⚠️"
-                        msg = (
-                            f"{emoji} **Atualização {nome}**\n"
-                            f"De: {estado_anterior.get(nome, 'Desconhecido')}\n"
-                            f"Para: **{status_atual}**"
-                        )
-                        if descricao and "Normal" not in status_atual:
-                            msg += f"\nObs: _{descricao}_"
-                        
-                        print(f"Mudança: {nome}")
-                        enviar_telegram(msg)
-                        houve_mudanca = True
+                # Se mudou de status
+                if nome in estado_anterior and estado_anterior[nome] != status_atual:
+                    status_antigo = estado_anterior[nome]
                     
-                    # Atualiza o estado na memória
-                    novo_estado[nome] = status_atual
+                    # 1. Avisa no Telegram
+                    emoji = "✅" if "Normal" in status_atual else "⚠️"
+                    msg = (
+                        f"{emoji} **{nome}**\n"
+                        f"De: {status_antigo}\n"
+                        f"Para: **{status_atual}**"
+                    )
+                    if descricao and "Normal" not in status_atual:
+                        msg += f"\nObs: _{descricao}_"
+                    
+                    enviar_telegram(msg)
+                    
+                    # 2. Salva no Histórico (CSV)
+                    salvar_historico(nome, status_atual, status_antigo, descricao)
+                    
+                    print(f"Registrado: {nome} mudou para {status_atual}")
+                    houve_mudanca = True
+                
+                # Atualiza memória
+                novo_estado[nome] = status_atual
             
-            # 2. Salva o futuro (se houve mudança, atualiza o JSON)
+            # Se houve mudança, salva o JSON e o CSV
             if houve_mudanca or not estado_anterior:
                 salvar_estado_atual(novo_estado)
-                print("Estado atualizado salvo no JSON.")
             else:
-                print("Nenhuma mudança detectada.")
+                print("Sem mudanças.")
                 
         else:
-            print(f"Erro na API: {response.status_code}")
-            sys.exit(1) # Força erro para o GitHub avisar
+            print(f"Erro API: {response.status_code}")
+            sys.exit(1)
             
     except Exception as e:
         print(f"Erro crítico: {e}")
