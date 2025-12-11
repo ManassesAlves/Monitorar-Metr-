@@ -47,7 +47,7 @@ O fluxo de dados segue a seguinte lógica:
 
 1.  **Clone este repositório:**
     ```bash
-    git clone [https://github.com/SEU-USUARIO/SEU-REPO.git](https://github.com/SEU-USUARIO/SEU-REPO.git)
+    git clone [https://github.com/ManassesAlves/Monitor-Metr-.git](https://github.com/ManassesAlves/Monitor-Metr-.git)
     ```
 
 2.  **Configure os Segredos (Secrets):**
