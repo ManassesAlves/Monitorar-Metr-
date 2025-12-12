@@ -4,7 +4,7 @@ on:
   schedule:
     # Roda a cada 5 minutos (limite razoável do GitHub Free)
     # A sintaxe cron é: minuto hora dia mes dia-da-semana
-    - cron: '*/5 * * * *'
+    - cron: '*/6 * * * *'
   workflow_dispatch: # Permite rodar manualmente clicando num botão para testar
 
 jobs:
