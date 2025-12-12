@@ -47,7 +47,7 @@ O fluxo de dados segue a seguinte lógica:
 
 1.  **Clone este repositório:**
     ```bash
-    git clone [https://github.com/ManassesAlves/Monitorar-Metro.git](https://github.com/ManassesAlves/Monitorar-Metro.git)
+    git clone [https://github.com/ManassesAlves/Monitorar-Metr-.git](https://github.com/ManassesAlves/Monitorar-Metr-.git)
     ```
     *(Nota: Se o link acima der erro, verifique se o nome do repositório no navegador é exatamente Monitorar-Metro)*
 
