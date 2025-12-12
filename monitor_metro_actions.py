@@ -12,6 +12,23 @@ URL_API = "https://www.diretodostrens.com.br/api/status"
 ARQUIVO_ESTADO = "estado_metro.json"
 ARQUIVO_HISTORICO = "historico_metro.csv"
 
+# --- MAPEAMENTO DE LINHAS (Hardcoded para garantir consistência) ---
+LINHAS_COR = {
+    "1": "Azul",
+    "2": "Verde",
+    "3": "Vermelha",
+    "4": "Amarela",
+    "5": "Lilás",
+    "7": "Rubi",
+    "8": "Diamante",
+    "9": "Esmeralda",
+    "10": "Turquesa",
+    "11": "Coral",
+    "12": "Safira",
+    "13": "Jade",
+    "15": "Prata"
+}
+
 def get_horario_sp():
     """Retorna data/hora ajustada para São Paulo (UTC-3)"""
     fuso_sp = timezone(timedelta(hours=-3))
@@ -22,7 +39,10 @@ def enviar_telegram(mensagem):
         return
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     data = {"chat_id": CHAT_ID, "text": mensagem, "parse_mode": "Markdown"}
-    requests.post(url, data=data)
+    try:
+        requests.post(url, data=data, timeout=10)
+    except Exception as e:
+        print(f"Erro ao enviar Telegram: {e}")
 
 def carregar_estado_anterior():
     if os.path.exists(ARQUIVO_ESTADO):
@@ -38,20 +58,23 @@ def salvar_historico(nome_linha, status_novo, status_antigo, descricao):
     arquivo_existe = os.path.exists(ARQUIVO_HISTORICO)
     agora = get_horario_sp()
     
-    with open(ARQUIVO_HISTORICO, mode='a', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        if not arquivo_existe:
-            writer.writerow(["Data", "Hora", "Dia_Semana", "Linha", "Status_Novo", "Status_Anterior", "Descricao"])
-            
-        writer.writerow([
-            agora.strftime("%Y-%m-%d"),
-            agora.strftime("%H:%M:%S"),
-            agora.strftime("%A"),
-            nome_linha,
-            status_novo,
-            status_antigo,
-            descricao
-        ])
+    try:
+        with open(ARQUIVO_HISTORICO, mode='a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            if not arquivo_existe:
+                writer.writerow(["Data", "Hora", "Dia_Semana", "Linha", "Status_Novo", "Status_Anterior", "Descricao"])
+                
+            writer.writerow([
+                agora.strftime("%Y-%m-%d"),
+                agora.strftime("%H:%M:%S"),
+                agora.strftime("%A"),
+                nome_linha,
+                status_novo,
+                status_antigo,
+                descricao
+            ])
+    except Exception as e:
+        print(f"Erro ao salvar CSV: {e}")
 
 def main():
     print("--- Iniciando Verificação ---")
@@ -61,41 +84,47 @@ def main():
     
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (MonitorMetroGitHub/1.0)'}
-        response = requests.get(URL_API, headers=headers, timeout=15)
+        response = requests.get(URL_API, headers=headers, timeout=20)
         
         if response.status_code == 200:
             linhas = response.json()
             
             for linha in linhas:
-                nome = f"Linha {linha.get('codigo')} - {linha.get('nome')}"
-                status_atual = linha.get('situacao')
-                descricao = linha.get('descricao') # Captura a descrição do problema
+                codigo = str(linha.get('codigo'))
                 
-                # Se mudou de status
-                if nome in estado_anterior and estado_anterior[nome] != status_atual:
-                    status_antigo = estado_anterior[nome]
+                # CORREÇÃO AQUI: Usamos nosso dicionário, não a API
+                cor = LINHAS_COR.get(codigo, "Desconhecida")
+                nome_formatado = f"Linha {codigo} - {cor}"
+                
+                status_atual = linha.get('situacao')
+                descricao = linha.get('descricao')
+                
+                # Identificador único para o dicionário de estado
+                chave_estado = f"L{codigo}" 
+                
+                # Se a chave não existia antes ou mudou de status
+                if chave_estado in estado_anterior and estado_anterior[chave_estado] != status_atual:
+                    status_antigo = estado_anterior[chave_estado]
                     
-                    # --- MONTAGEM DA MENSAGEM COM DESCRIÇÃO ---
+                    # --- MONTAGEM DA MENSAGEM ---
                     emoji = "✅" if "Normal" in status_atual else "⚠️"
                     msg = (
-                        f"{emoji} **{nome}**\n"
+                        f"{emoji} **{nome_formatado}**\n"
                         f"🔄 De: {status_antigo}\n"
                         f"➡️ Para: **{status_atual}**"
                     )
                     
-                    # Verifica se existe descrição e se não está vazia
                     if descricao and len(str(descricao).strip()) > 0:
                         msg += f"\n\n📢 **Detalhes:**\n_{descricao}_"
-                    # -------------------------------------------
                     
                     enviar_telegram(msg)
-                    salvar_historico(nome, status_atual, status_antigo, descricao)
+                    salvar_historico(nome_formatado, status_atual, status_antigo, descricao)
                     
-                    print(f"Registrado: {nome} mudou para {status_atual}")
+                    print(f"Registrado: {nome_formatado} mudou para {status_atual}")
                     houve_mudanca = True
                 
-                # Atualiza memória
-                novo_estado[nome] = status_atual
+                # Atualiza memória usando a chave curta (L1, L2...) para economizar bytes
+                novo_estado[chave_estado] = status_atual
             
             if houve_mudanca or not estado_anterior:
                 salvar_estado_atual(novo_estado)
