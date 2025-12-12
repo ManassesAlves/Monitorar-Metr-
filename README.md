@@ -28,7 +28,7 @@ O fluxo de dados segue a seguinte lógica:
 1.  **Trigger:** O GitHub Actions inicia o workflow a cada X minutos.
 2.  **Extração:** O script Python consulta a API pública de status.
 3.  **Transformação & Comparação:**
-    * Carrega o estado anterior salvo no JSON (`estado_metro.json`).
+    * Carrega o estado anterior salvo no JSON.
     * Compara com o estado atual.
 4.  **Ação (Se houver mudança):**
     * Envia mensagem formatada para o Bot do Telegram.
@@ -47,8 +47,9 @@ O fluxo de dados segue a seguinte lógica:
 
 1.  **Clone este repositório:**
     ```bash
-    git clone [https://github.com/ManassesAlves/Monitor-Metr-.git](https://github.com/ManassesAlves/Monitor-Metr-.git)
+    git clone [https://github.com/ManassesAlves/Monitorar-Metro.git](https://github.com/ManassesAlves/Monitorar-Metro.git)
     ```
+    *(Nota: Se o link acima der erro, verifique se o nome do repositório no navegador é exatamente Monitorar-Metro)*
 
 2.  **Configure os Segredos (Secrets):**
     No seu repositório no GitHub, vá em `Settings` > `Secrets and variables` > `Actions` e adicione:
@@ -89,4 +90,4 @@ Este projeto utiliza a API pública do serviço **Direto dos Trens** para fins e
 
 ---
 
-**Desenvolvido por Manassés Alves**
+**Desenvolvido por Manasses Alves**
