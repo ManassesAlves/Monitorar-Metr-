@@ -82,8 +82,17 @@ def main():
     novo_estado = estado_anterior.copy()
     houve_mudanca = False
     
-    try:
-        headers = {'User-Agent': 'Mozilla/5.0 (MonitorMetroGitHub/1.0)'}
+   try:
+        # --- MUDANÇA AQUI: Cabeçalhos completos de navegador real ---
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Referer': 'https://www.diretodostrens.com.br/',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Connection': 'keep-alive'
+        }
+        # -----------------------------------------------------------
+        
         response = requests.get(URL_API, headers=headers, timeout=20)
         
         if response.status_code == 200:
