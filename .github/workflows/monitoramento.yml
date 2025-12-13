@@ -21,7 +21,9 @@ jobs:
           python-version: '3.9'
 
       - name: Instalar dependências
-        run: pip install requests
+        run: |
+          pip install requests
+          pip install cloudscraper
 
       - name: Rodar Script
         env:
