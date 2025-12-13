@@ -3,6 +3,7 @@ import json
 import csv
 import os
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 
 # --- CONFIGURAÇÕES ---
@@ -12,25 +13,13 @@ URL_API = "https://www.diretodostrens.com.br/api/status"
 ARQUIVO_ESTADO = "estado_metro.json"
 ARQUIVO_HISTORICO = "historico_metro.csv"
 
-# --- MAPEAMENTO DE LINHAS ---
 LINHAS_COR = {
-    "1": "Azul",
-    "2": "Verde",
-    "3": "Vermelha",
-    "4": "Amarela",
-    "5": "Lilás",
-    "7": "Rubi",
-    "8": "Diamante",
-    "9": "Esmeralda",
-    "10": "Turquesa",
-    "11": "Coral",
-    "12": "Safira",
-    "13": "Jade",
-    "15": "Prata"
+    "1": "Azul", "2": "Verde", "3": "Vermelha", "4": "Amarela", "5": "Lilás",
+    "7": "Rubi", "8": "Diamante", "9": "Esmeralda", "10": "Turquesa",
+    "11": "Coral", "12": "Safira", "13": "Jade", "15": "Prata"
 }
 
 def get_horario_sp():
-    """Retorna data/hora ajustada para São Paulo (UTC-3)"""
     fuso_sp = timezone(timedelta(hours=-3))
     return datetime.now(fuso_sp)
 
@@ -42,12 +31,15 @@ def enviar_telegram(mensagem):
     try:
         requests.post(url, data=data, timeout=10)
     except Exception as e:
-        print(f"Erro ao enviar Telegram: {e}")
+        print(f"Erro Telegram: {e}")
 
 def carregar_estado_anterior():
     if os.path.exists(ARQUIVO_ESTADO):
-        with open(ARQUIVO_ESTADO, 'r') as f:
-            return json.load(f)
+        try:
+            with open(ARQUIVO_ESTADO, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
     return {}
 
 def salvar_estado_atual(estado):
@@ -57,64 +49,71 @@ def salvar_estado_atual(estado):
 def salvar_historico(nome_linha, status_novo, status_antigo, descricao):
     arquivo_existe = os.path.exists(ARQUIVO_HISTORICO)
     agora = get_horario_sp()
-    
     try:
         with open(ARQUIVO_HISTORICO, mode='a', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             if not arquivo_existe:
                 writer.writerow(["Data", "Hora", "Dia_Semana", "Linha", "Status_Novo", "Status_Anterior", "Descricao"])
-                
             writer.writerow([
-                agora.strftime("%Y-%m-%d"),
-                agora.strftime("%H:%M:%S"),
-                agora.strftime("%A"),
-                nome_linha,
-                status_novo,
-                status_antigo,
-                descricao
+                agora.strftime("%Y-%m-%d"), agora.strftime("%H:%M:%S"), agora.strftime("%A"),
+                nome_linha, status_novo, status_antigo, descricao
             ])
     except Exception as e:
-        print(f"Erro ao salvar CSV: {e}")
+        print(f"Erro CSV: {e}")
 
 def main():
-    print("--- Iniciando Verificação ---")
+    print("--- Iniciando Verificação (Modo Stealth) ---")
     estado_anterior = carregar_estado_anterior()
     novo_estado = estado_anterior.copy()
     houve_mudanca = False
     
+    # Cria uma sessão para manter cookies (parece mais humano)
+    session = requests.Session()
+    
+    # Cabeçalhos completos de um navegador Chrome no Windows
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Referer': 'https://www.diretodostrens.com.br/',
+        'Origin': 'https://www.diretodostrens.com.br',
+        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-origin',
+        'Connection': 'keep-alive',
+        'Pragma': 'no-cache',
+        'Cache-Control': 'no-cache'
+    }
+
     try:
-        # --- CABEÇALHOS ANTI-BLOQUEIO (Simula um Chrome real) ---
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Referer': 'https://www.diretodostrens.com.br/',
-            'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-            'Connection': 'keep-alive'
-        }
-        
-        response = requests.get(URL_API, headers=headers, timeout=20)
+        # Tenta conectar
+        response = session.get(URL_API, headers=headers, timeout=25)
         
         if response.status_code == 200:
             linhas = response.json()
             
             for linha in linhas:
                 codigo = str(linha.get('codigo'))
-                cor = LINHAS_COR.get(codigo, "Desconhecida")
-                nome_formatado = f"Linha {codigo} - {cor}"
+                cor = LINHAS_COR.get(codigo, "")
+                nome_formatado = f"Linha {codigo} - {cor}" if cor else f"Linha {codigo}"
                 
                 status_atual = linha.get('situacao')
                 descricao = linha.get('descricao')
                 
-                chave_estado = f"L{codigo}" 
+                chave_estado = f"L{codigo}"
                 
-                # Se a chave não existia ou mudou de status
-                if chave_estado in estado_anterior and estado_anterior[chave_estado] != status_atual:
-                    status_antigo = estado_anterior[chave_estado]
-                    
+                # Lógica de detecção de mudança
+                status_salvo = estado_anterior.get(chave_estado)
+                
+                if status_salvo and status_salvo != status_atual:
+                    print(f"Mudança detectada: {nome_formatado}")
                     emoji = "✅" if "Normal" in status_atual else "⚠️"
                     msg = (
                         f"{emoji} **{nome_formatado}**\n"
-                        f"🔄 De: {status_antigo}\n"
+                        f"🔄 De: {status_salvo}\n"
                         f"➡️ Para: **{status_atual}**"
                     )
                     
@@ -122,25 +121,26 @@ def main():
                         msg += f"\n\n📢 **Detalhes:**\n_{descricao}_"
                     
                     enviar_telegram(msg)
-                    salvar_historico(nome_formatado, status_atual, status_antigo, descricao)
-                    
-                    print(f"Registrado: {nome_formatado} mudou para {status_atual}")
+                    salvar_historico(nome_formatado, status_atual, status_salvo, descricao)
                     houve_mudanca = True
                 
-                # Atualiza memória
                 novo_estado[chave_estado] = status_atual
             
+            # Salva o estado se houver mudança ou se for a primeira execução (arquivo vazio)
             if houve_mudanca or not estado_anterior:
                 salvar_estado_atual(novo_estado)
+                print("Estado atualizado.")
             else:
-                print("Sem mudanças detectadas.")
-                
+                print("Sem mudanças no status.")
+
         else:
             print(f"Erro API: {response.status_code}")
+            # Se der 401, imprime os headers de resposta para tentarmos entender (aparecerá no log)
+            print(f"Headers Resposta: {response.headers}")
             sys.exit(1)
-            
+
     except Exception as e:
-        print(f"Erro crítico: {e}")
+        print(f"Erro Crítico: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
