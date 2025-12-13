@@ -90,4 +90,4 @@ Este projeto utiliza a API pública do serviço **Direto dos Trens** para fins e
 
 ---
 
-**Desenvolvido por Manasses Alves**
+**Desenvolvido por Manassés Alves**
