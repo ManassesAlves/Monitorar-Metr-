@@ -12,7 +12,7 @@ URL_API = "https://www.diretodostrens.com.br/api/status"
 ARQUIVO_ESTADO = "estado_metro.json"
 ARQUIVO_HISTORICO = "historico_metro.csv"
 
-# --- MAPEAMENTO DE LINHAS (Hardcoded para garantir consistência) ---
+# --- MAPEAMENTO DE LINHAS ---
 LINHAS_COR = {
     "1": "Azul",
     "2": "Verde",
@@ -82,8 +82,8 @@ def main():
     novo_estado = estado_anterior.copy()
     houve_mudanca = False
     
-   try:
-        # --- MUDANÇA AQUI: Cabeçalhos completos de navegador real ---
+    try:
+        # --- CABEÇALHOS ANTI-BLOQUEIO (Simula um Chrome real) ---
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Referer': 'https://www.diretodostrens.com.br/',
@@ -91,7 +91,6 @@ def main():
             'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
             'Connection': 'keep-alive'
         }
-        # -----------------------------------------------------------
         
         response = requests.get(URL_API, headers=headers, timeout=20)
         
@@ -100,22 +99,18 @@ def main():
             
             for linha in linhas:
                 codigo = str(linha.get('codigo'))
-                
-                # CORREÇÃO AQUI: Usamos nosso dicionário, não a API
                 cor = LINHAS_COR.get(codigo, "Desconhecida")
                 nome_formatado = f"Linha {codigo} - {cor}"
                 
                 status_atual = linha.get('situacao')
                 descricao = linha.get('descricao')
                 
-                # Identificador único para o dicionário de estado
                 chave_estado = f"L{codigo}" 
                 
-                # Se a chave não existia antes ou mudou de status
+                # Se a chave não existia ou mudou de status
                 if chave_estado in estado_anterior and estado_anterior[chave_estado] != status_atual:
                     status_antigo = estado_anterior[chave_estado]
                     
-                    # --- MONTAGEM DA MENSAGEM ---
                     emoji = "✅" if "Normal" in status_atual else "⚠️"
                     msg = (
                         f"{emoji} **{nome_formatado}**\n"
@@ -132,13 +127,13 @@ def main():
                     print(f"Registrado: {nome_formatado} mudou para {status_atual}")
                     houve_mudanca = True
                 
-                # Atualiza memória usando a chave curta (L1, L2...) para economizar bytes
+                # Atualiza memória
                 novo_estado[chave_estado] = status_atual
             
             if houve_mudanca or not estado_anterior:
                 salvar_estado_atual(novo_estado)
             else:
-                print("Sem mudanças.")
+                print("Sem mudanças detectadas.")
                 
         else:
             print(f"Erro API: {response.status_code}")
