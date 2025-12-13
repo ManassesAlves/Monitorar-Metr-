@@ -1,10 +1,10 @@
-import requests
+import cloudscraper # Biblioteca antibloqueio
 import json
 import csv
 import os
 import sys
-import time
 from datetime import datetime, timedelta, timezone
+import requests # Fallback caso precise
 
 # --- CONFIGURAÇÕES ---
 TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -62,35 +62,17 @@ def salvar_historico(nome_linha, status_novo, status_antigo, descricao):
         print(f"Erro CSV: {e}")
 
 def main():
-    print("--- Iniciando Verificação (Modo Stealth) ---")
+    print("--- Iniciando Verificação (Modo Cloudscraper) ---")
     estado_anterior = carregar_estado_anterior()
     novo_estado = estado_anterior.copy()
     houve_mudanca = False
     
-    # Cria uma sessão para manter cookies (parece mais humano)
-    session = requests.Session()
-    
-    # Cabeçalhos completos de um navegador Chrome no Windows
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Referer': 'https://www.diretodostrens.com.br/',
-        'Origin': 'https://www.diretodostrens.com.br',
-        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'same-origin',
-        'Connection': 'keep-alive',
-        'Pragma': 'no-cache',
-        'Cache-Control': 'no-cache'
-    }
+    # Cria um scraper especializado em passar por Cloudflare/WAF
+    scraper = cloudscraper.create_scraper()
 
     try:
-        # Tenta conectar
-        response = session.get(URL_API, headers=headers, timeout=25)
+        # Tenta conectar usando o scraper em vez do requests puro
+        response = scraper.get(URL_API, timeout=30)
         
         if response.status_code == 200:
             linhas = response.json()
@@ -104,12 +86,10 @@ def main():
                 descricao = linha.get('descricao')
                 
                 chave_estado = f"L{codigo}"
-                
-                # Lógica de detecção de mudança
                 status_salvo = estado_anterior.get(chave_estado)
                 
                 if status_salvo and status_salvo != status_atual:
-                    print(f"Mudança detectada: {nome_formatado}")
+                    print(f"Mudança: {nome_formatado}")
                     emoji = "✅" if "Normal" in status_atual else "⚠️"
                     msg = (
                         f"{emoji} **{nome_formatado}**\n"
@@ -126,17 +106,14 @@ def main():
                 
                 novo_estado[chave_estado] = status_atual
             
-            # Salva o estado se houver mudança ou se for a primeira execução (arquivo vazio)
             if houve_mudanca or not estado_anterior:
                 salvar_estado_atual(novo_estado)
-                print("Estado atualizado.")
             else:
-                print("Sem mudanças no status.")
+                print("Tudo normal.")
 
         else:
             print(f"Erro API: {response.status_code}")
-            # Se der 401, imprime os headers de resposta para tentarmos entender (aparecerá no log)
-            print(f"Headers Resposta: {response.headers}")
+            print(f"Conteúdo: {response.text[:200]}") # Mostra o erro para debug
             sys.exit(1)
 
     except Exception as e:
