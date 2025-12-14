@@ -1,15 +1,17 @@
-import cloudscraper # Biblioteca antibloqueio
+import cloudscraper
 import json
 import csv
 import os
 import sys
 from datetime import datetime, timedelta, timezone
-import requests # Fallback caso precise
 
 # --- CONFIGURAÇÕES ---
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+
+# A URL oficial que você confirmou no Swagger
 URL_API = "https://www.diretodostrens.com.br/api/status"
+
 ARQUIVO_ESTADO = "estado_metro.json"
 ARQUIVO_HISTORICO = "historico_metro.csv"
 
@@ -26,10 +28,12 @@ def get_horario_sp():
 def enviar_telegram(mensagem):
     if not TOKEN or not CHAT_ID:
         return
+    # Usamos o scraper para o Telegram também para evitar inconsistências SSL
+    scraper = cloudscraper.create_scraper()
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     data = {"chat_id": CHAT_ID, "text": mensagem, "parse_mode": "Markdown"}
     try:
-        requests.post(url, data=data, timeout=10)
+        scraper.post(url, data=data)
     except Exception as e:
         print(f"Erro Telegram: {e}")
 
@@ -62,18 +66,25 @@ def salvar_historico(nome_linha, status_novo, status_antigo, descricao):
         print(f"Erro CSV: {e}")
 
 def main():
-    print("--- Iniciando Verificação (Modo Cloudscraper) ---")
+    print("--- Iniciando Verificação (Bypass Cloudflare) ---")
     estado_anterior = carregar_estado_anterior()
     novo_estado = estado_anterior.copy()
     houve_mudanca = False
     
-    # Cria um scraper especializado em passar por Cloudflare/WAF
-    scraper = cloudscraper.create_scraper()
+    # CRÍTICO: Cria o navegador falso que passa pelo bloqueio 401
+    scraper = cloudscraper.create_scraper(
+        browser={
+            'browser': 'chrome',
+            'platform': 'windows',
+            'desktop': True
+        }
+    )
 
     try:
-        # Tenta conectar usando o scraper em vez do requests puro
+        print(f"Acessando: {URL_API}")
         response = scraper.get(URL_API, timeout=30)
         
+        # Se passar pelo bloqueio (200 OK)
         if response.status_code == 200:
             linhas = response.json()
             
@@ -89,7 +100,7 @@ def main():
                 status_salvo = estado_anterior.get(chave_estado)
                 
                 if status_salvo and status_salvo != status_atual:
-                    print(f"Mudança: {nome_formatado}")
+                    print(f"MUDANÇA: {nome_formatado}")
                     emoji = "✅" if "Normal" in status_atual else "⚠️"
                     msg = (
                         f"{emoji} **{nome_formatado}**\n"
@@ -108,12 +119,14 @@ def main():
             
             if houve_mudanca or not estado_anterior:
                 salvar_estado_atual(novo_estado)
+                print("Estado salvo.")
             else:
-                print("Tudo normal.")
+                print("Nenhuma alteração detectada.")
 
         else:
-            print(f"Erro API: {response.status_code}")
-            print(f"Conteúdo: {response.text[:200]}") # Mostra o erro para debug
+            print(f"❌ Erro API: {response.status_code}")
+            # Se der erro, mostramos o motivo (pode ser um HTML de bloqueio)
+            print(f"Resposta: {response.text[:200]}") 
             sys.exit(1)
 
     except Exception as e:
